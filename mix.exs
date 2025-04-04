@@ -1,9 +1,9 @@
-defmodule EthereumApi.MixProject do
+defmodule JsonRpc.MixProject do
   use Mix.Project
 
   def project do
     [
-      app: :ethereum_api,
+      app: :json_rpc,
       version: "0.1.0",
       elixir: "~> 1.18",
       start_permanent: Mix.env() == :prod,
@@ -22,8 +22,7 @@ defmodule EthereumApi.MixProject do
   # Run "mix help compile.app" to learn about applications.
   def application do
     [
-      extra_applications: [:logger],
-      mod: {EthereumApi.Application, []}
+      extra_applications: [:logger]
     ]
   end
 
@@ -32,10 +31,7 @@ defmodule EthereumApi.MixProject do
     [
       {:ex_doc, "~> 0.37.3", only: :dev, runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
-
-      {:httpoison, "~> 2.2.2"},
       {:poison, "~> 6.0.0"},
-
       {:result, git: "git@github.com:ZenHive/result_elixir.git", tag: "v0.1.0"},
       {:option, git: "git@github.com:ZenHive/option_elixir.git", tag: "v0.1.0"},
 

@@ -34,3 +34,6 @@ yogic_mind-*.tar
 /priv/static/cache_manifest.json
 
 .elixir_ls/
+
+Makefile
+.vscode/

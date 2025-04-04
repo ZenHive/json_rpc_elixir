@@ -1,21 +1,15 @@
-# EthereumApi
+# JsonRpc
 
-**TODO: Add description**
+TODO
 
 ## Installation
 
-If [available in Hex](https://hex.pm/docs/publish), the package can be installed
-by adding `ethereum_api` to your list of dependencies in `mix.exs`:
+The package can be installed by adding `json_rpc` to your list of dependencies in `mix.exs`:
 
 ```elixir
 def deps do
   [
-    {:ethereum_api, "~> 0.1.0"}
+    {:json_rpc, git: "git@github.com:ZenHive/json_rpc_elixir.git", tag: "v0.1.0"},
   ]
 end
 ```
-
-Documentation can be generated with [ExDoc](https://github.com/elixir-lang/ex_doc)
-and published on [HexDocs](https://hexdocs.pm). Once published, the docs can
-be found at <https://hexdocs.pm/ethereum_api>.
-
