@@ -1,4 +1,12 @@
 defmodule JsonRpc.Request do
+  @moduledoc """
+  Defines functions for creating JSON-RPC requests.
+
+  There are 2 types of requests:
+  - Call requests: These are requests that expect a response.
+  - Notification requests: These are requests that do not expect a response.
+  """
+
   alias JsonRpc.RequestId
   import RequestId, only: [is_id: 1]
 
@@ -7,7 +15,9 @@ defmodule JsonRpc.Request do
   @type params :: map() | list()
 
   defguard is_request(request) when is_binary(request)
+
   defguard is_method(method) when is_binary(method)
+
   defguard is_params(params) when is_map(params) or is_list(params)
 
   @spec new_call_with_params(method :: method(), params :: params(), id :: RequestId.t()) :: t()

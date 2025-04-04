@@ -1,4 +1,103 @@
 defmodule JsonRpc.ApiCreator do
+  @moduledoc """
+  Defines a use macro for creating JSON-RPC APIs.
+
+  ## Usage
+
+  This macro helps you create JSON-RPC API modules by automatically generating functions
+  that map to JSON-RPC methods. It handles the boilerplate of making RPC calls and
+  parsing responses.
+
+  ### Basic Usage
+
+  ```elixir
+  defmodule MyApi do
+    use JsonRpc.ApiCreator, {MyApi.Worker, [
+      %{
+        method: "getUser",
+        doc: "Fetches a user by ID",
+        response_type: User.t(),
+        response_parser: &User.parse/1,
+        args: [id: integer()],
+        args_transformer!: fn id ->
+          if is_integer(id) do
+            %{id: id}
+          else
+            raise ArgumentError, "id must be an integer"
+          end
+        end
+      }
+    ]}
+  end
+  ```
+
+  This will generate a function `get_user/1` that:
+  1. Takes a string ID as input
+  2. Makes a JSON-RPC call to the "getUser" method
+  3. Parses the response into a User struct
+
+  ### Method Configuration
+
+  Each method in the list should be a map with the following keys:
+
+  - `method`: The JSON-RPC method name (string)
+  - `doc`: Documentation for the generated function.
+  - `response_type`: The type specification for the response.
+  - `response_parser`: A function that parses the raw response into the desired type. Is only called
+    if the RPC call is successful. If should return `{:ok, any()}` or `{:error, any()}`.
+  - `args`: A keyword list of `{arg_name, type}` tuples defining the function arguments.
+    This argument is optional.
+  - `args_transformer!`: A function that transforms the arguments into the format expected by the
+    RPC call (can also be used to validate the arguments). This argument is required only if `args`
+    is provided.
+
+  ### Debug Mode
+
+  You can enable debug mode by using the `:debug` option:
+
+  ```elixir
+  use JsonRpc.ApiCreator, {:debug, MyClient, [...]}
+  ```
+
+  This will print the generated code to the console.
+
+  ### Example
+
+  ```elixir
+  defmodule UserApi do
+    use JsonRpc.ApiCreator, {MyClient, [
+      %{
+        method: "getUser",
+        doc: "Fetches a user by ID",
+        response_type: User.t(),
+        response_parser: &User.parse/1,
+        args: [id: integer()],
+        args_transformer!: fn id ->
+          if is_integer(id) do
+            %{id: id}
+          else
+            raise ArgumentError, "id must be an integer"
+          end
+        end
+      },
+      %{
+        method: "listUsers",
+        doc: "Lists all users",
+        response_type: [User.t()],
+        response_parser: fn
+          response when is_list(response) -> {:ok, Enum.map(response, &User.parse/1)}
+          _ -> {:error, "Invalid response"}
+        end
+      }
+    ]}
+  end
+
+  # Usage:
+  UserApi.get_user("123") # Returns {:ok, %User{}} or {:error, reason}
+  UserApi.list_users()    # Returns {:ok, [{:ok, %User{}}, ...]} or {:error, reason}
+  ```
+  """
+
   defmacro __using__({:{}, _, [:debug, client, methods]}) do
     methods
     |> List.wrap()

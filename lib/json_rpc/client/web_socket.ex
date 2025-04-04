@@ -7,11 +7,17 @@ defmodule JsonRpc.Client.WebSocket do
 
   @default_timeout :timer.seconds(5)
 
+  @doc """
+  Starts a new WebSocket client that handles JSON-RPC requests and responses.
+  """
   @spec start_link(conn_info(), WebSockex.options()) :: Result.t(pid(), term())
   def start_link(conn, opts \\ []) do
     WebSockex.start_link(conn, Handler, %Handler.State{}, opts)
   end
 
+  @doc """
+  Sends a JSON-RPC call request with params and returns the response.
+  """
   @spec call_with_params(
           WebSockex.client(),
           JsonRpc.Request.method(),
@@ -24,6 +30,9 @@ defmodule JsonRpc.Client.WebSocket do
     receive_response(client, timeout)
   end
 
+  @doc """
+  Sends a JSON-RPC call request without params and returns the response.
+  """
   @spec call_without_params(
           WebSockex.client(),
           JsonRpc.Request.method(),
@@ -55,12 +64,18 @@ defmodule JsonRpc.Client.WebSocket do
     end
   end
 
+  @doc """
+  Sends a JSON-RPC notification request with params.
+  """
   @spec notify_with_params(WebSockex.client(), JsonRpc.Request.method(), JsonRpc.Request.params()) ::
           :ok
   def notify_with_params(client, method, params) when is_method(method) and is_params(params) do
     WebSockex.cast(client, {:notify_with_params, {method, params}})
   end
 
+  @doc """
+  Sends a JSON-RPC notification request without params.
+  """
   @spec notify_without_params(WebSockex.client(), JsonRpc.Request.method()) :: :ok
   def notify_without_params(client, method) when is_method(method) do
     WebSockex.cast(client, {:notify_without_params, method})

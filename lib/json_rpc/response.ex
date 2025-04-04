@@ -1,4 +1,8 @@
 defmodule JsonRpc.Response do
+  @moduledoc """
+  Defines functions for parsing JSON-RPC responses.
+  """
+
   alias JsonRpc.RequestId
   import RequestId, only: [is_id: 1]
 

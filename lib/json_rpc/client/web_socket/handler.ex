@@ -4,6 +4,8 @@ defmodule JsonRpc.Client.WebSocket.Handler do
   use WebSockex
 
   defmodule State do
+    @moduledoc false
+
     defstruct next_id: 0,
               id_to_pid: %{}
 

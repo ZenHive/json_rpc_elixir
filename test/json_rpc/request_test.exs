@@ -1,6 +1,7 @@
 defmodule JsonRpc.RequestTest do
   use ExUnit.Case, async: true
   alias JsonRpc.Request
+  require JsonRpc.Request
 
   describe "new_call_with_params/3" do
     test "creates a new request with params" do
@@ -71,6 +72,29 @@ defmodule JsonRpc.RequestTest do
                  jsonrpc: :"2.0",
                  method: method
                })
+    end
+  end
+
+  describe "guards" do
+    test "is_request/1" do
+      assert Request.is_request("valid_request")
+      refute Request.is_request(123)
+      refute Request.is_request(%{})
+      refute Request.is_request([])
+    end
+
+    test "is_method/1" do
+      assert Request.is_method("valid_method")
+      refute Request.is_method(123)
+      refute Request.is_method(%{})
+      refute Request.is_method([])
+    end
+
+    test "is_params/1" do
+      assert Request.is_params(%{key: "value"})
+      assert Request.is_params([1, 2, 3])
+      refute Request.is_params("not params")
+      refute Request.is_params(123)
     end
   end
 end

@@ -1,4 +1,8 @@
 defmodule JsonRpc.Response.Error do
+  @moduledoc """
+  Defines a type for JSON-RPC error responses.
+  """
+
   @enforce_keys [:code, :message, :data]
   defstruct [
     :code,
