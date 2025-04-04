@@ -12,22 +12,25 @@ defmodule JsonRpc.ApiCreator do
 
   ```elixir
   defmodule MyApi do
-    use JsonRpc.ApiCreator, {MyApi.Worker, [
-      %{
-        method: "getUser",
-        doc: "Fetches a user by ID",
-        response_type: User.t(),
-        response_parser: &User.parse/1,
-        args: [id: integer()],
-        args_transformer!: fn id ->
-          if is_integer(id) do
-            %{id: id}
-          else
-            raise ArgumentError, "id must be an integer"
+    use JsonRpc.ApiCreator, {
+      MyApi.Worker, # The name of the worker started with JsonRpc.Client.WebSocket.start_link/2
+      [
+        %{
+          method: "getUser",
+          doc: "Fetches a user by ID",
+          response_type: User.t(),
+          response_parser: &User.parse/1,
+          args: [id: integer()],
+          args_transformer!: fn id ->
+            if is_integer(id) do
+              %{id: id}
+            else
+              raise ArgumentError, "id must be an integer"
+            end
           end
-        end
-      }
-    ]}
+        }
+      ]
+    }
   end
   ```
 

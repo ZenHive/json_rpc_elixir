@@ -1,4 +1,8 @@
 defmodule JsonRpc.Client.WebSocket do
+  @moduledoc """
+  A WebSocket client for JSON-RPC 2.0.
+  """
+
   alias JsonRpc.Client.WebSocket.Handler
 
   import JsonRpc.Request, only: [is_method: 1, is_params: 1]
