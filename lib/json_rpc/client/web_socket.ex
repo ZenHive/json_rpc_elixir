@@ -8,14 +8,20 @@ defmodule JsonRpc.Client.WebSocket do
   import JsonRpc.Request, only: [is_method: 1, is_params: 1]
 
   @type conn_info :: String.t() | WebSockex.Conn.t()
+  @type name :: atom() | {:global, term()} | {:via, module(), term()}
 
   @default_timeout :timer.seconds(5)
 
   @doc """
   Starts a new WebSocket client that handles JSON-RPC requests and responses.
   """
-  @spec start_link(conn_info(), WebSockex.options()) :: Result.t(pid(), term())
-  def start_link(conn, opts \\ []) do
+  @spec start_link(conn_info(), Option.t(name()), Option.t(WebSockex.debug_opts())) ::
+          Result.t(pid(), term())
+  def start_link(conn, name \\ nil, debug \\ nil) do
+    opts = [async: true, handle_initial_conn_failure: true]
+    opts = if name, do: Keyword.put(opts, :name, name), else: opts
+    opts = if debug, do: Keyword.put(opts, :debug, debug), else: opts
+
     WebSockex.start_link(conn, Handler, %Handler.State{}, opts)
   end
 
@@ -30,7 +36,7 @@ defmodule JsonRpc.Client.WebSocket do
         ) :: Result.t(JsonRpc.Response.t(), term())
   def call_with_params(client, method, params, timeout \\ @default_timeout)
       when is_method(method) and is_params(params) and is_integer(timeout) do
-    WebSockex.cast(client, {:call_with_params, {self(), method, params}})
+    send(client, {:call_with_params, {self(), method, params}})
     receive_response(client, timeout)
   end
 
@@ -44,7 +50,7 @@ defmodule JsonRpc.Client.WebSocket do
         ) :: Result.t(JsonRpc.Response.t(), term())
   def call_without_params(client, method, timeout \\ @default_timeout)
       when is_method(method) and is_integer(timeout) do
-    WebSockex.cast(client, {:call_without_params, {self(), method}})
+    send(client, {:call_without_params, {self(), method}})
     receive_response(client, timeout)
   end
 
@@ -74,7 +80,8 @@ defmodule JsonRpc.Client.WebSocket do
   @spec notify_with_params(WebSockex.client(), JsonRpc.Request.method(), JsonRpc.Request.params()) ::
           :ok
   def notify_with_params(client, method, params) when is_method(method) and is_params(params) do
-    WebSockex.cast(client, {:notify_with_params, {method, params}})
+    send(client, {:notify_with_params, {method, params}})
+    :ok
   end
 
   @doc """
@@ -82,6 +89,7 @@ defmodule JsonRpc.Client.WebSocket do
   """
   @spec notify_without_params(WebSockex.client(), JsonRpc.Request.method()) :: :ok
   def notify_without_params(client, method) when is_method(method) do
-    WebSockex.cast(client, {:notify_without_params, method})
+    send(client, {:notify_without_params, method})
+    :ok
   end
 end

@@ -6,7 +6,7 @@ defmodule JsonRpc.Client.WebSocketTest do
     port = 4000
     {:ok, _} = NotificationsStorer.start_link()
     {:ok, _} = DummyServer.start(port)
-    {:ok, _} = WebSocket.start_link("ws://localhost:#{port}", name: __MODULE__)
+    {:ok, _} = WebSocket.start_link("ws://localhost:#{port}", __MODULE__)
     :ok
   end
 
