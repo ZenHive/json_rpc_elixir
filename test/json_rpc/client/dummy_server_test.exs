@@ -1,8 +1,45 @@
 defmodule DummyServer do
+  use GenServer
+
   require Logger
 
-  def start(port) do
+  def start_link(port) do
     Bandit.start_link(plug: __MODULE__.Router, scheme: :http, port: port)
+    |> Result.unwrap!()
+
+    GenServer.start_link(__MODULE__, nil, name: __MODULE__)
+  end
+
+  def set_dummy_server_pid(pid) do
+    GenServer.cast(__MODULE__, {:set_dummy_server_pid, pid})
+  end
+
+  def send_message_to_client(msg) do
+    GenServer.cast(__MODULE__, {:send_message_to_client, msg})
+  end
+
+  @impl GenServer
+  def init(_) do
+    {:ok, nil}
+  end
+
+  @impl GenServer
+  def handle_cast({:set_dummy_server_pid, pid}, state) do
+    if state do
+      raise "DummyServer pid already set"
+    end
+
+    {:noreply, pid}
+  end
+
+  def handle_cast({:send_message_to_client, msg}, pid) do
+    if pid do
+      send(pid, {:send_to_client, msg})
+    else
+      raise "DummyServer pid not set"
+    end
+
+    {:noreply, pid}
   end
 end
 
@@ -26,6 +63,11 @@ end
 
 defmodule DummyServer.WebSock do
   @behaviour WebSock
+
+  def init(options) do
+    DummyServer.set_dummy_server_pid(self())
+    {:ok, options}
+  end
 
   def handle_in({json, [opcode: :text]}, state) do
     IO.puts("DummyServer received: #{json}")
@@ -76,11 +118,11 @@ defmodule DummyServer.WebSock do
     {:push, {:text, response}, state}
   end
 
-  def handle_info(_, state) do
-    {:ok, state}
+  def handle_info({:send_to_client, msg}, state) do
+    {:push, msg, state}
   end
 
-  def init(options) do
-    {:ok, options}
+  def handle_info(_, state) do
+    {:ok, state}
   end
 end

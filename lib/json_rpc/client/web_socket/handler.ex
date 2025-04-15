@@ -6,14 +6,21 @@ defmodule JsonRpc.Client.WebSocket.Handler do
   defmodule State do
     @moduledoc false
 
-    defstruct next_id: 0,
-              id_to_pid: %{},
-              time_before_reconnect: 100
+    @fields [
+      :next_id,
+      :id_to_pid,
+      :time_before_reconnect,
+      :unrecognized_frame_handler
+    ]
+
+    @enforce_keys @fields
+    defstruct @fields
 
     @type t :: %__MODULE__{
             next_id: non_neg_integer(),
             id_to_pid: %{non_neg_integer() => pid()},
-            time_before_reconnect: non_neg_integer()
+            time_before_reconnect: non_neg_integer(),
+            unrecognized_frame_handler: (any() -> any())
           }
   end
 
@@ -82,6 +89,16 @@ defmodule JsonRpc.Client.WebSocket.Handler do
 
     try do
       do_handle_frame(frame, state)
+      |> case do
+        {:error, state} ->
+          # TODO use a logger
+          IO.puts("Sending unrecognized response to handler")
+          state.unrecognized_frame_handler.(frame)
+          {:ok, state}
+
+        {:ok, state} ->
+          {:ok, state}
+      end
     rescue
       error ->
         # TODO use a logger
@@ -93,32 +110,30 @@ defmodule JsonRpc.Client.WebSocket.Handler do
     end
   end
 
+  @spec do_handle_frame(any(), State.t()) :: Result.t(State.t(), State.t())
   defp do_handle_frame({:text, data} = frame, state) do
     case Poison.decode(data) do
       {:error, reason} ->
         # TODO use a logger
         IO.puts("Failed to decode frame #{inspect(frame)}, error: #{inspect(reason)}")
-        {:ok, state}
+        {:error, state}
 
       {:ok, data} ->
         parse_and_send_response(data, state)
     end
   end
 
-  defp do_handle_frame(frame, state) do
-    # TODO use a logger
-    IO.puts("Ignored frame: #{inspect(frame)}")
-
-    {:ok, state}
+  defp do_handle_frame(_frame, state) do
+    {:error, state}
   end
 
-  @spec parse_and_send_response(map(), State.t()) :: {:ok, State.t()}
+  @spec parse_and_send_response(map(), State.t()) :: Result.t(State.t(), State.t())
   defp parse_and_send_response(data, state) do
     case JsonRpc.Response.parse_response(data) do
       {:error, reason} ->
         # TODO use a logger
         IO.puts("Failed to parse frame #{inspect(data)}, error: #{inspect(reason)}")
-        {:ok, state}
+        {:error, state}
 
       {:ok, {id, response}} ->
         send_response(id, response, state)
@@ -126,13 +141,13 @@ defmodule JsonRpc.Client.WebSocket.Handler do
   end
 
   @spec send_response(JsonRpc.RequestId.t(), JsonRpc.Response.t(), State.t()) ::
-          {:ok, State.t()}
+          Result.t(State.t(), State.t())
   defp send_response(id, response, state) do
     case Map.fetch(state.id_to_pid, id) do
       :error ->
         # TODO use a logger
         IO.puts("invalid id (#{id}) in response #{inspect(response)}")
-        {:ok, state}
+        {:error, state}
 
       {:ok, pid} ->
         # TODO use a logger
@@ -192,8 +207,9 @@ defmodule JsonRpc.Client.WebSocket.Handler do
     IO.puts("Sending call request with payload: #{request}")
 
     state = %State{
-      next_id: state.next_id + 1,
-      id_to_pid: Map.put(state.id_to_pid, state.next_id, pid)
+      state
+      | next_id: state.next_id + 1,
+        id_to_pid: Map.put(state.id_to_pid, state.next_id, pid)
     }
 
     {:reply, {:text, request}, state}

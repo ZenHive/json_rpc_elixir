@@ -5,8 +5,16 @@ defmodule JsonRpc.Client.WebSocketTest do
   setup_all do
     port = 4000
     {:ok, _} = NotificationsStorer.start_link()
-    {:ok, _} = DummyServer.start(port)
-    {:ok, _} = WebSocket.start_link("ws://localhost:#{port}", __MODULE__)
+    {:ok, _} = UnrecognizedFrameHandler.start_link()
+    {:ok, _} = DummyServer.start_link(port)
+
+    {:ok, _} =
+      WebSocket.start_link("ws://localhost:#{port}",
+        name: __MODULE__,
+        unrecognized_frame_handler: &UnrecognizedFrameHandler.add_response/1
+      )
+
+    Process.sleep(100)
     :ok
   end
 
@@ -16,7 +24,7 @@ defmodule JsonRpc.Client.WebSocketTest do
   end
 
   defp assert_notification_exists(content) do
-    Process.sleep(1_000)
+    Process.sleep(100)
 
     assert Enum.any?(NotificationsStorer.get_notifications(), fn elem ->
              content == elem
@@ -77,6 +85,8 @@ defmodule JsonRpc.Client.WebSocketTest do
     params = get_random_params()
 
     assert {:error, :timeout} = WebSocket.call_with_params(__MODULE__, method, params, 0)
+    Process.sleep(200)
+    assert UnrecognizedFrameHandler.has_json_rpc_response?(method, params)
   end
 
   test "call_without_params/2 response sent after timeout" do
@@ -84,6 +94,8 @@ defmodule JsonRpc.Client.WebSocketTest do
       "response_after_timeout_call_without_params" <> Integer.to_string(:rand.uniform(1000))
 
     assert {:error, :timeout} = WebSocket.call_without_params(__MODULE__, method, 0)
+    Process.sleep(200)
+    assert UnrecognizedFrameHandler.has_json_rpc_response?(method)
   end
 
   test "notify_with_params/2" do
@@ -108,5 +120,19 @@ defmodule JsonRpc.Client.WebSocketTest do
       "jsonrpc" => "2.0",
       "method" => method
     })
+  end
+
+  test "unrecognized text frame gets sent to the handler" do
+    nb = :rand.uniform(1000) |> Integer.to_string()
+    DummyServer.send_message_to_client({:text, nb})
+    Process.sleep(100)
+    assert UnrecognizedFrameHandler.get_responses() |> Enum.any?(&(&1 == {:text, nb}))
+  end
+
+  test "unrecognized binray frame gets sent to the handler" do
+    nb = :rand.uniform(1000) |> Integer.to_string()
+    DummyServer.send_message_to_client({:binary, nb})
+    Process.sleep(100)
+    assert UnrecognizedFrameHandler.get_responses() |> Enum.any?(&(&1 == {:binary, nb}))
   end
 end

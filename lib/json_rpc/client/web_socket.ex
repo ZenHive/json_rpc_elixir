@@ -12,17 +12,39 @@ defmodule JsonRpc.Client.WebSocket do
 
   @default_timeout :timer.seconds(5)
 
+  @type option :: [
+          name: name(),
+          debug: WebSockex.debug_opts(),
+          unrecognized_frame_handler: (WebSockex.frame() -> any())
+        ]
+
   @doc """
   Starts a new WebSocket client that handles JSON-RPC requests and responses.
-  """
-  @spec start_link(conn_info(), Option.t(name()), Option.t(WebSockex.debug_opts())) ::
-          Result.t(pid(), term())
-  def start_link(conn, name \\ nil, debug \\ nil) do
-    opts = [async: true, handle_initial_conn_failure: true]
-    opts = if name, do: Keyword.put(opts, :name, name), else: opts
-    opts = if debug, do: Keyword.put(opts, :debug, debug), else: opts
 
-    WebSockex.start_link(conn, Handler, %Handler.State{}, opts)
+  ## Options
+  - name: The name of the process.
+  - debug: Debugging options for WebSockex.
+  - unrecognized_frame_handler: A function that handles unrecognized frames.
+    This function will be called with the unrecognized frame as an argument.
+  """
+  @spec start_link(conn_info(), [option()]) :: Result.t(pid(), term())
+  def start_link(conn, opts \\ []) do
+    unrecognized_frame_handler =
+      Keyword.get(opts, :unrecognized_frame_handler) || fn _ -> :ok end
+
+    opts =
+      Keyword.delete(opts, :unrecognized_frame_handler)
+      |> Keyword.put(:async, true)
+      |> Keyword.put(:handle_initial_conn_failure, true)
+
+    state = %Handler.State{
+      next_id: 0,
+      id_to_pid: %{},
+      time_before_reconnect: 100,
+      unrecognized_frame_handler: unrecognized_frame_handler
+    }
+
+    WebSockex.start_link(conn, Handler, state, opts)
   end
 
   @doc """

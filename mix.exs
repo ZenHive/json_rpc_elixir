@@ -11,9 +11,7 @@ defmodule JsonRpc.MixProject do
       dialyzer: [
         flags: [
           :unmatched_returns,
-          :extra_return,
-          :missing_return,
-          :unmatched_returns
+          :missing_return
         ]
       ]
     ]
@@ -32,7 +30,7 @@ defmodule JsonRpc.MixProject do
       {:ex_doc, "~> 0.37.3", only: :dev, runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:poison, "~> 6.0.0"},
-      {:result, git: "git@github.com:ZenHive/result_elixir.git", tag: "v0.1.0"},
+      {:result, git: "git@github.com:ZenHive/result_elixir.git", tag: "v0.3.0"},
       {:option, git: "git@github.com:ZenHive/option_elixir.git", tag: "v0.1.0"},
 
       ## Web socket client
