@@ -3,18 +3,16 @@ defmodule JsonRpc.Client.WebSocketTest do
   alias JsonRpc.Client.WebSocket
 
   setup_all do
-    port = 4000
+    port = 4200
     {:ok, _} = NotificationsStorer.start_link()
     {:ok, _} = UnrecognizedFrameHandler.start_link()
     {:ok, _} = DummyServer.start_link(port)
-
     {:ok, _} =
       WebSocket.start_link("ws://localhost:#{port}",
         name: __MODULE__,
         unrecognized_frame_handler: &UnrecognizedFrameHandler.add_response/1
       )
 
-    Process.sleep(100)
     :ok
   end
 

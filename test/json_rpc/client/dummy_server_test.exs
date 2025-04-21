@@ -15,7 +15,13 @@ defmodule DummyServer do
   end
 
   def send_message_to_client(msg) do
-    GenServer.cast(__MODULE__, {:send_message_to_client, msg})
+    case GenServer.call(__MODULE__, {:send_message_to_client, msg}) do
+      :ok ->
+        :ok
+
+      :pid_not_set_yet ->
+        send_message_to_client(msg)
+    end
   end
 
   @impl GenServer
@@ -32,14 +38,14 @@ defmodule DummyServer do
     {:noreply, pid}
   end
 
-  def handle_cast({:send_message_to_client, msg}, pid) do
+  @impl GenServer
+  def handle_call({:send_message_to_client, msg}, _, pid) do
     if pid do
       send(pid, {:send_to_client, msg})
+      {:reply, :ok, pid}
     else
-      raise "DummyServer pid not set"
+      {:reply, :pid_not_set_yet, pid}
     end
-
-    {:noreply, pid}
   end
 end
 
