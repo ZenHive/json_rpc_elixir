@@ -26,6 +26,8 @@ defmodule JsonRpc.ApiCreatorTest do
            %{
              method: "listUsers",
              doc: "Lists all users",
+             timeout: 2_000,
+             retries: 4,
              response_type: [User.t()],
              response_parser: fn
                response when is_list(response) -> {:ok, Enum.map(response, &User.parse/1)}
@@ -54,6 +56,8 @@ defmodule JsonRpc.ApiCreatorTest do
       %{
         method: "listUsers",
         doc: "Lists all users",
+        timeout: 2_000,
+        retries: 4,
         response_type: [User.t()],
         response_parser: fn
           response when is_list(response) -> {:ok, Enum.map(response, &User.parse/1)}

@@ -1,4 +1,7 @@
 defmodule JsonRpc.ApiCreator do
+  @default_retries 2
+  @default_timeout 5_000
+
   @moduledoc """
   Defines a use macro for creating JSON-RPC APIs.
 
@@ -16,6 +19,8 @@ defmodule JsonRpc.ApiCreator do
       %{
         method: "getUser",
         doc: "Fetches a user by ID",
+        retries: 2,
+        timeout: :timer.seconds(5)
         response_type: User.t(),
         response_parser: &User.parse/1,
         args: [{id, integer()}],
@@ -45,6 +50,10 @@ defmodule JsonRpc.ApiCreator do
   - `response_type`: The type specification for the response.
   - `response_parser`: A function that parses the raw response into the desired type. Is only called
     if the RPC call is successful. If should return `{:ok, any()}` or `{:error, any()}`.
+  - retries: The number of times to retry the request if it fails (is optional, defaults to
+    #{@default_retries})
+  - timeout: The maximum time to wait for a response in ms (is optional, defaults to
+    #{@default_timeout})
   - `args`: A list of `{arg_name, type}` tuples defining the function arguments.
     This argument is optional.
   - `args_transformer!`: A function that transforms the arguments into the format expected by the
@@ -56,9 +65,9 @@ defmodule JsonRpc.ApiCreator do
   You can enable debug mode by using the `:debug` option:
 
   ```elixir
-  use JsonRpc.ApiCreator, {:debug, MyClient, [...]}
+  use JsonRpc.ApiCreator, {:debug, [...]}
   ```
-  This will print the generated code to the console.
+  This will print the generated code to the console during compilation.
 
   ### Example
 
@@ -82,6 +91,8 @@ defmodule JsonRpc.ApiCreator do
       %{
         method: "listUsers",
         doc: "Lists all users",
+        retries: 2,
+        timeout: :timer.seconds(5)
         response_type: [User.t()],
         response_parser: fn
           response when is_list(response) -> {:ok, Enum.map(response, &User.parse/1)}
@@ -91,26 +102,30 @@ defmodule JsonRpc.ApiCreator do
     ]
   end
 
+  {:ok, client} = JsonRpc.Client.WebSocket.start_link("ws://localhost:4242")
+
   # Usage:
   UserApi.get_user(client, "123") # Returns {:ok, %User{}} or {:error, reason}
   UserApi.list_users(client)    # Returns {:ok, [{:ok, %User{}}, ...]} or {:error, reason}
+
+  UserApi.get_user(client, "123", timeout: 3000, retries: 4) # override timeout and retries
   ```
   """
 
   defmacro __using__({:debug, methods}) do
     methods
     |> List.wrap()
-    |> Enum.map(&generate_ast(&1, __CALLER__.module))
+    |> Enum.map(&generate_ast(&1))
     |> print_debug_code(__CALLER__.module)
   end
 
   defmacro __using__(methods) do
     methods
     |> List.wrap()
-    |> Enum.map(&generate_ast(&1, __CALLER__.module))
+    |> Enum.map(&generate_ast(&1))
   end
 
-  defp generate_ast({:%{}, _, opts}, module) do
+  defp generate_ast({:%{}, _, opts}) do
     %{
       method: method,
       doc: doc,
@@ -122,69 +137,78 @@ defmodule JsonRpc.ApiCreator do
     args_spec = Enum.map(args, fn {arg, type} -> quote do: unquote(arg) :: unquote(type) end)
     args = Enum.map(args, fn {arg, _type} -> arg end)
     args_transformer! = get_args_transformer!(args, opts, method)
+    timeout = Map.get(opts, :timeout, @default_timeout)
+    retries = Map.get(opts, :retries, @default_retries)
 
     func_name = method |> to_snake_case() |> String.to_atom()
-    response_type_name = String.to_atom("#{func_name}_response") |> Macro.var(module)
+    do_func_name = :"do_#{func_name}"
 
     quote do
-      @type unquote(response_type_name) :: unquote(response_type)
-
       @doc unquote(doc)
-      @spec unquote(func_name)(WebSockex.client(), unquote_splicing(args_spec)) ::
-              Result.t(unquote(response_type_name), any())
-      def unquote(func_name)(client, unquote_splicing(args)) do
-        unquote(
-          generate_function_body_ast(
-            args,
-            method,
-            response_parser,
-            args_transformer!
-          )
+      @spec unquote(func_name)(
+              WebSockex.client(),
+              unquote_splicing(args_spec),
+              opts :: [{:retries, non_neg_integer()} | {:timeout, non_neg_integer()}]
+            ) ::
+              Result.t(
+                unquote(response_type),
+                :connection_closed | :timeout | JsonRpc.Response.Error.t() | any()
+              )
+      def unquote(func_name)(client, unquote_splicing(args), opts \\ []) do
+        unquote(do_func_name)(
+          client,
+          unquote_splicing(args),
+          Keyword.get(opts, :timeout, unquote(timeout)),
+          Keyword.get(opts, :retries, unquote(retries))
         )
+      end
+
+      defp unquote(do_func_name)(client, unquote_splicing(args), timeout, retries) do
+        result =
+          unquote(
+            if args != [] do
+              quote do
+                JsonRpc.Client.WebSocket.call_with_params(
+                  client,
+                  unquote(method),
+                  unquote(args_transformer!).(unquote_splicing(args)) |> List.wrap(),
+                  timeout
+                )
+              end
+            else
+              quote do
+                JsonRpc.Client.WebSocket.call_without_params(
+                  client,
+                  unquote(method),
+                  timeout
+                )
+              end
+            end
+          )
+
+        case result do
+          {:ok, raw_response_result} ->
+            # This pattern is only true if the response is neither :connection_closed nor :timeout
+            with {:ok, raw_response} <- raw_response_result,
+                 do: unquote(response_parser).(raw_response)
+
+          error ->
+            if retries > 0 do
+              unquote(do_func_name)(client, unquote_splicing(args), timeout, retries - 1)
+            else
+              error
+            end
+        end
       end
     end
   end
 
   defp get_args_transformer!(args, opts, method) do
-    case args do
-      [] ->
-        :nop
-
-      [_ | _] ->
-        Map.get(opts, :args_transformer!) ||
-          throw("Missing key :args_transformer! for method #{method}")
-    end
-  end
-
-  defp generate_function_body_ast(
-         [],
-         method,
-         response_parser,
-         _args_transformer!
-       ) do
-    quote do
-      with {:ok, response} <-
-             JsonRpc.Client.WebSocket.call_without_params(client, unquote(method)),
-           {:ok, result} <- response,
-           do: unquote(response_parser).(result)
-    end
-  end
-
-  defp generate_function_body_ast(
-         args,
-         method,
-         response_parser,
-         args_transformer!
-       ) do
-    quote do
-      with {:ok, response} <-
-             JsonRpc.Client.WebSocket.call_with_params(
-               client,
-               unquote(method),
-               unquote(args_transformer!).(unquote_splicing(args)) |> List.wrap()
-             ),
-           {:ok, result} <- response,
-           do: unquote(response_parser).(result)
+    if args != [] do
+      Map.get(opts, :args_transformer!) ||
+        throw("Missing key :args_transformer! for method #{method}")
+    else
+      :nop
     end
   end
 
