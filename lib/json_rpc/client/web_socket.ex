@@ -29,8 +29,7 @@ defmodule JsonRpc.Client.WebSocket do
   """
   @spec start_link(conn_info(), [option()]) :: Result.t(pid(), term())
   def start_link(conn, opts \\ []) do
-    unrecognized_frame_handler =
-      Keyword.get(opts, :unrecognized_frame_handler) || fn _ -> :ok end
+    unrecognized_frame_handler = Keyword.get(opts, :unrecognized_frame_handler, fn _ -> :ok end)
 
     opts =
       Keyword.delete(opts, :unrecognized_frame_handler)

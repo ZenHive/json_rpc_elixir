@@ -1,6 +1,8 @@
 defmodule JsonRpc.ApiCreator do
   @default_retries 2
   @default_timeout 5_000
+  @default_retry_on_timeout? false
+  @default_time_between_retries 200
 
   @moduledoc """
   ## Description
@@ -19,6 +21,8 @@ defmodule JsonRpc.ApiCreator do
         doc: "Fetches a user by ID",
         retries: 2,
         timeout: :timer.seconds(5)
+        retry_on_timeout?: false,
+        time_between_retries: 200,
         response_type: User.t(),
         response_parser: &User.parse/1,
         args: [{id, integer()}],
@@ -52,6 +56,13 @@ defmodule JsonRpc.ApiCreator do
     #{@default_retries})
   - `timeout`: The maximum time to wait for a response in ms (is optional, defaults to
     #{@default_timeout})
+  - `retry_on_timeout?`: Defines whether to retry the request after a timeout (do not set to true on
+    something like an ethereum transaction as it might duplicate the transaction if the first
+    request went through, but was simply slow to respond) (is optional, defaults to
+    #{@default_retry_on_timeout?})
+  - `time_between_retries`: The time to wait between retries in ms (If retry_on_timeout? is true we
+    first wait for the request to timeout, then wait for time_between_retries, and finally retry
+    the request) (is optional, defaults to #{@default_time_between_retries})
   - `args`: A list of `{arg_name, type}` tuples defining the function arguments.
     This argument is optional.
   - `args_transformer!`: A function that transforms the arguments into the format expected by the
@@ -91,6 +102,8 @@ defmodule JsonRpc.ApiCreator do
         doc: "Lists all users",
         retries: 2,
         timeout: :timer.seconds(5)
+        retry_on_timeout?: true,
+        time_between_retries: 200,
         response_type: [User.t()],
         response_parser: fn
           response when is_list(response) -> {:ok, Enum.map(response, &User.parse/1)}
@@ -138,6 +151,8 @@ defmodule JsonRpc.ApiCreator do
     args_transformer! = get_args_transformer!(args, opts, method)
     timeout = Map.get(opts, :timeout, @default_timeout)
     retries = Map.get(opts, :retries, @default_retries)
+    retry_on_timeout? = Map.get(opts, :retry_on_timeout?, @default_retry_on_timeout?)
+    time_between_retries = Map.get(opts, :time_between_retries, @default_time_between_retries)
 
     func_name = method |> to_snake_case() |> String.to_atom()
     do_func_name = :"do_#{func_name}"
@@ -147,7 +162,12 @@ defmodule JsonRpc.ApiCreator do
       @spec unquote(func_name)(
               WebSockex.client(),
               unquote_splicing(args_spec),
-              opts :: [{:retries, non_neg_integer()} | {:timeout, non_neg_integer()}]
+              opts :: [
+                {:retries, non_neg_integer()}
+                | {:timeout, non_neg_integer()}
+                | {:retry_on_timeout?, boolean()}
+                | {:time_between_retries, non_neg_integer()}
+              ]
             ) ::
               Result.t(
                 unquote(response_type),
@@ -158,11 +178,20 @@ defmodule JsonRpc.ApiCreator do
           client,
           unquote_splicing(args),
           Keyword.get(opts, :timeout, unquote(timeout)),
-          Keyword.get(opts, :retries, unquote(retries))
+          Keyword.get(opts, :retries, unquote(retries)),
+          Keyword.get(opts, :retry_on_timeout?, unquote(retry_on_timeout?)),
+          Keyword.get(opts, :time_between_retries, unquote(time_between_retries))
         )
       end
 
-      defp unquote(do_func_name)(client, unquote_splicing(args), timeout, retries) do
+      defp unquote(do_func_name)(
+             client,
+             unquote_splicing(args),
+             timeout,
+             retries,
+             retry_on_timeout?,
+             time_between_retries
+           ) do
         result =
           unquote(
             if args != [] do
@@ -191,11 +220,20 @@ defmodule JsonRpc.ApiCreator do
             with {:ok, raw_response} <- raw_response_result,
                  do: unquote(response_parser).(raw_response)
 
-          error ->
-            if retries > 0 do
-              unquote(do_func_name)(client, unquote_splicing(args), timeout, retries - 1)
+          {:error, reason} ->
+            if retries > 0 && (reason != :timeout || retry_on_timeout?) do
+              Process.sleep(time_between_retries)
+
+              unquote(do_func_name)(
+                client,
+                unquote_splicing(args),
+                timeout,
+                retries - 1,
+                retry_on_timeout?,
+                time_between_retries
+              )
             else
-              error
+              {:error, reason}
             end
         end
       end

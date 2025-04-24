@@ -28,6 +28,8 @@ defmodule JsonRpc.ApiCreatorTest do
              doc: "Lists all users",
              timeout: 2_000,
              retries: 4,
+             retry_on_timeout?: true,
+             time_between_retries: 400,
              response_type: [User.t()],
              response_parser: fn
                response when is_list(response) -> {:ok, Enum.map(response, &User.parse/1)}
@@ -58,6 +60,8 @@ defmodule JsonRpc.ApiCreatorTest do
         doc: "Lists all users",
         timeout: 2_000,
         retries: 4,
+        retry_on_timeout?: true,
+        time_between_retries: 400,
         response_type: [User.t()],
         response_parser: fn
           response when is_list(response) -> {:ok, Enum.map(response, &User.parse/1)}
