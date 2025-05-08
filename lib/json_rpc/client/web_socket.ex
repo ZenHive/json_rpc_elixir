@@ -27,7 +27,7 @@ defmodule JsonRpc.Client.WebSocket do
   - unrecognized_frame_handler: A function that handles unrecognized frames.
     This function will be called with the unrecognized frame as an argument.
   """
-  @spec start_link(conn_info(), [option()]) :: Result.t(pid(), term())
+  @spec start_link(conn_info(), [option()]) :: {:ok, pid()} | {:error, term()}
   def start_link(conn, opts \\ []) do
     unrecognized_frame_handler = Keyword.get(opts, :unrecognized_frame_handler, fn _ -> :ok end)
 
@@ -54,7 +54,7 @@ defmodule JsonRpc.Client.WebSocket do
           JsonRpc.Request.method(),
           JsonRpc.Request.params(),
           timeout :: integer()
-        ) :: Result.t(JsonRpc.Response.t(), :connection_closed | :timeout)
+        ) :: {:ok, JsonRpc.Response.t()} | {:error, :connection_closed | :timeout}
   def call_with_params(client, method, params, timeout \\ @default_timeout)
       when is_method(method) and is_params(params) and is_integer(timeout) do
     send(client, {:call_with_params, {self(), method, params}})
@@ -68,7 +68,7 @@ defmodule JsonRpc.Client.WebSocket do
           WebSockex.client(),
           JsonRpc.Request.method(),
           timeout :: integer()
-        ) :: Result.t(JsonRpc.Response.t(), :connection_closed | :timeout)
+        ) :: {:ok, JsonRpc.Response.t()} | {:error, :connection_closed | :timeout}
   def call_without_params(client, method, timeout \\ @default_timeout)
       when is_method(method) and is_integer(timeout) do
     send(client, {:call_without_params, {self(), method}})
@@ -76,7 +76,7 @@ defmodule JsonRpc.Client.WebSocket do
   end
 
   @spec receive_response(WebSockex.client(), timeout :: integer()) ::
-          Result.t(JsonRpc.Response.t(), :connection_closed | :timeout)
+          {:ok, JsonRpc.Response.t()} | {:error, :connection_closed | :timeout}
   defp receive_response(client, timeout) do
     receive do
       {:json_rpc_frame, response} -> {:ok, response}

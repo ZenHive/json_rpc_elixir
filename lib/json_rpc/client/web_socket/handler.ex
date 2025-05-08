@@ -110,7 +110,7 @@ defmodule JsonRpc.Client.WebSocket.Handler do
     end
   end
 
-  @spec do_handle_frame(any(), State.t()) :: Result.t(State.t(), State.t())
+  @spec do_handle_frame(any(), State.t()) :: {:ok, State.t()} | {:error, State.t()}
   defp do_handle_frame({:text, data} = frame, state) do
     case Poison.decode(data) do
       {:error, reason} ->
@@ -127,7 +127,7 @@ defmodule JsonRpc.Client.WebSocket.Handler do
     {:error, state}
   end
 
-  @spec parse_and_send_response(map(), State.t()) :: Result.t(State.t(), State.t())
+  @spec parse_and_send_response(map(), State.t()) :: {:ok, State.t()} | {:error, State.t()}
   defp parse_and_send_response(data, state) do
     case JsonRpc.Response.parse_response(data) do
       {:error, reason} ->
@@ -141,7 +141,7 @@ defmodule JsonRpc.Client.WebSocket.Handler do
   end
 
   @spec send_response(JsonRpc.RequestId.t(), JsonRpc.Response.t(), State.t()) ::
-          Result.t(State.t(), State.t())
+          {:ok, State.t()} | {:error, State.t()}
   defp send_response(id, response, state) do
     case Map.fetch(state.id_to_pid, id) do
       :error ->

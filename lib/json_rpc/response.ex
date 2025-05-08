@@ -6,12 +6,12 @@ defmodule JsonRpc.Response do
   alias JsonRpc.RequestId
   import RequestId, only: [is_id: 1]
 
-  @type t :: Result.t(__MODULE__.Ok.t(), __MODULE__.Error.t())
+  @type t :: {:ok, __MODULE__.Ok.t()} | {:error, __MODULE__.Error.t()}
 
   @type non_compliant_response :: {:non_compliant_response, map()}
 
   @spec parse_response(raw_response :: map()) ::
-          Result.t({RequestId.t(), t()}, non_compliant_response())
+          {:ok, {RequestId.t(), t()}} | {:error, non_compliant_response()}
 
   def parse_response(%{"jsonrpc" => "2.0", "id" => id, "result" => result}) when is_id(id) do
     {:ok, {id, {:ok, __MODULE__.Ok.new(result)}}}

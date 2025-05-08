@@ -169,10 +169,8 @@ defmodule JsonRpc.ApiCreator do
                 | {:time_between_retries, non_neg_integer()}
               ]
             ) ::
-              Result.t(
-                unquote(response_type),
-                :connection_closed | :timeout | JsonRpc.Response.Error.t() | any()
-              )
+              {:ok, unquote(response_type)}
+              | {:error, :connection_closed | :timeout | JsonRpc.Response.Error.t() | any()}
       def unquote(func_name)(client, unquote_splicing(args), opts \\ []) do
         unquote(do_func_name)(
           client,
