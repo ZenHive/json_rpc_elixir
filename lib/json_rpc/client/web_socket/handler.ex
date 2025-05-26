@@ -27,8 +27,7 @@ defmodule JsonRpc.Client.WebSocket.Handler do
   @impl WebSockex
   @spec handle_connect(WebSockex.Conn.t(), State.t()) :: {:ok, State.t()}
   def handle_connect(conn, state) do
-    # TODO use a logger
-    IO.puts("JsonRpc websocket connected to the server: #{inspect(conn)}")
+    log_message("JsonRpc websocket connected to the server: #{inspect(conn)}")
 
     {:ok, %State{state | time_before_reconnect: 100}}
   end
@@ -36,8 +35,9 @@ defmodule JsonRpc.Client.WebSocket.Handler do
   @impl WebSockex
   @spec handle_disconnect(any(), State.t()) :: {:reconnect, State.t()}
   def handle_disconnect(connection_status_map, state) do
-    # TODO use a logger
-    IO.puts("JsonRpc websocket disconnected from the server: #{inspect(connection_status_map)}")
+    log_message(
+      "JsonRpc websocket disconnected from the server: #{inspect(connection_status_map)}"
+    )
 
     Enum.each(state.id_to_pid, fn {_id, pid} ->
       send_connection_closed_error(pid)
@@ -71,8 +71,7 @@ defmodule JsonRpc.Client.WebSocket.Handler do
         clear_messages()
 
       message ->
-        # TODO use a logger
-        IO.puts("Ignoring message: #{inspect(message)}")
+        log_message("Ignoring message: #{inspect(message)}")
         clear_messages()
     end
   end
@@ -84,15 +83,13 @@ defmodule JsonRpc.Client.WebSocket.Handler do
   @impl WebSockex
   @spec handle_frame(any(), State.t()) :: {:ok, State.t()}
   def handle_frame(frame, state) do
-    # TODO use a logger
-    IO.puts("Received a frame: #{inspect(frame)}")
+    log_message("Received a frame: #{inspect(frame)}")
 
     try do
       do_handle_frame(frame, state)
       |> case do
         {:error, state} ->
-          # TODO use a logger
-          IO.puts("Sending unrecognized response to handler")
+          log_message("Sending unrecognized response to handler")
           state.unrecognized_frame_handler.(frame)
           {:ok, state}
 
@@ -101,8 +98,7 @@ defmodule JsonRpc.Client.WebSocket.Handler do
       end
     rescue
       error ->
-        # TODO use a logger
-        IO.puts(
+        log_message(
           "Error in handle_frame/2 with frame #{inspect(frame)}, state: #{inspect(state)}, error: #{inspect(error)}"
         )
 
@@ -114,8 +110,7 @@ defmodule JsonRpc.Client.WebSocket.Handler do
   defp do_handle_frame({:text, data} = frame, state) do
     case Poison.decode(data) do
       {:error, reason} ->
-        # TODO use a logger
-        IO.puts("Failed to decode frame #{inspect(frame)}, error: #{inspect(reason)}")
+        log_message("Failed to decode frame #{inspect(frame)}, error: #{inspect(reason)}")
         {:error, state}
 
       {:ok, data} ->
@@ -131,8 +126,7 @@ defmodule JsonRpc.Client.WebSocket.Handler do
   defp parse_and_send_response(data, state) do
     case JsonRpc.Response.parse_response(data) do
       {:error, reason} ->
-        # TODO use a logger
-        IO.puts("Failed to parse frame #{inspect(data)}, error: #{inspect(reason)}")
+        log_message("Failed to parse frame #{inspect(data)}, error: #{inspect(reason)}")
         {:error, state}
 
       {:ok, {id, response}} ->
@@ -145,13 +139,11 @@ defmodule JsonRpc.Client.WebSocket.Handler do
   defp send_response(id, response, state) do
     case Map.fetch(state.id_to_pid, id) do
       :error ->
-        # TODO use a logger
-        IO.puts("invalid id (#{id}) in response #{inspect(response)}")
+        log_message("invalid id (#{id}) in response #{inspect(response)}")
         {:error, state}
 
       {:ok, pid} ->
-        # TODO use a logger
-        IO.puts("Sending response with id #{id} to pid: #{inspect(pid)}")
+        log_message("Sending response with id #{id} to pid: #{inspect(pid)}")
         send(pid, {:json_rpc_frame, response})
 
         {:ok, %State{state | id_to_pid: Map.delete(state.id_to_pid, id)}}
@@ -165,8 +157,7 @@ defmodule JsonRpc.Client.WebSocket.Handler do
       do_handle_info(message, state)
     rescue
       error ->
-        # TODO use a logger
-        IO.puts(
+        log_message(
           "Error in handle_info/2 with message #{inspect(message)}, state: #{inspect(state)}, error: #{inspect(error)}"
         )
 
@@ -203,8 +194,7 @@ defmodule JsonRpc.Client.WebSocket.Handler do
   end
 
   defp send_call_request_and_update_state(request, pid, state) do
-    # TODO use a logger
-    IO.puts("Sending call request with payload: #{request}")
+    log_message("Sending call request with payload: #{request}")
 
     state = %State{
       state
@@ -216,8 +206,14 @@ defmodule JsonRpc.Client.WebSocket.Handler do
   end
 
   defp send_notify_request(request, state) do
-    # TODO use a logger
-    IO.puts("Sending notify request with payload: #{request}")
+    log_message("Sending notify request with payload: #{request}")
     {:reply, {:text, request}, state}
+  end
+
+  defp log_message(msg) do
+    # TODO use a proper logger
+    if Application.get_env(:json_rpc, :log, false) do
+      IO.puts(msg)
+    end
   end
 end
