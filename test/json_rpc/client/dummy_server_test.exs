@@ -4,8 +4,7 @@ defmodule DummyServer do
   require Logger
 
   def start_link(port) do
-    Bandit.start_link(plug: __MODULE__.Router, scheme: :http, port: port)
-    |> Result.unwrap!()
+    {:ok, _} = Bandit.start_link(plug: __MODULE__.Router, scheme: :http, port: port)
 
     GenServer.start_link(__MODULE__, nil, name: __MODULE__)
   end

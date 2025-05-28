@@ -37,3 +37,6 @@ yogic_mind-*.tar
 
 Makefile
 .vscode/
+
+# Ignore the file I use for testing
+lib/main.ex

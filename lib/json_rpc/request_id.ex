@@ -3,7 +3,7 @@ defmodule JsonRpc.RequestId do
   Defines a type for JSON-RPC request IDs.
   """
 
-  @type t :: Option.t(integer() | String.t())
+  @type t :: integer() | String.t() | nil
 
   defguard is_id(id) when is_integer(id) or is_binary(id) or is_nil(id)
 end
