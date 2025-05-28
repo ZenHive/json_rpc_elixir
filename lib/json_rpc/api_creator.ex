@@ -160,7 +160,7 @@ defmodule JsonRpc.ApiCreator do
     quote do
       @doc unquote(doc)
       @spec unquote(func_name)(
-              WebSockex.client(),
+              JsonRpc.Client.WebSocket.client(),
               unquote_splicing(args_spec),
               opts :: [
                 {:retries, non_neg_integer()}

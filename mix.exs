@@ -39,8 +39,8 @@ defmodule JsonRpc.MixProject do
       # Tests
 
       ## Web socket server
-      {:websock_adapter, "~> 0.5.8", only: [:test]},
-      {:bandit, "~> 1.6.8", only: [:test]}
+      {:websock_adapter, "~> 0.5.8"},
+      {:bandit, "~> 1.6.8"}
     ]
   end
 end

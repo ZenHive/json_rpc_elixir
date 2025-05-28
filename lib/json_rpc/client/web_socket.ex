@@ -7,6 +7,8 @@ defmodule JsonRpc.Client.WebSocket do
 
   import JsonRpc.Request, only: [is_method: 1, is_params: 1]
 
+  @type client :: WebSockex.client()
+
   @type conn_info :: String.t() | WebSockex.Conn.t()
   @type name :: atom() | {:global, term()} | {:via, module(), term()}
 
@@ -50,7 +52,7 @@ defmodule JsonRpc.Client.WebSocket do
   Sends a JSON-RPC call request with params and returns the response.
   """
   @spec call_with_params(
-          WebSockex.client(),
+          client(),
           JsonRpc.Request.method(),
           JsonRpc.Request.params(),
           timeout :: integer()
@@ -65,7 +67,7 @@ defmodule JsonRpc.Client.WebSocket do
   Sends a JSON-RPC call request without params and returns the response.
   """
   @spec call_without_params(
-          WebSockex.client(),
+          client(),
           JsonRpc.Request.method(),
           timeout :: integer()
         ) :: {:ok, JsonRpc.Response.t()} | {:error, :connection_closed | :timeout}
@@ -75,7 +77,7 @@ defmodule JsonRpc.Client.WebSocket do
     receive_response(client, timeout)
   end
 
-  @spec receive_response(WebSockex.client(), timeout :: integer()) ::
+  @spec receive_response(client(), timeout :: integer()) ::
           {:ok, JsonRpc.Response.t()} | {:error, :connection_closed | :timeout}
   defp receive_response(client, timeout) do
     receive do
@@ -98,7 +100,7 @@ defmodule JsonRpc.Client.WebSocket do
   @doc """
   Sends a JSON-RPC notification request with params.
   """
-  @spec notify_with_params(WebSockex.client(), JsonRpc.Request.method(), JsonRpc.Request.params()) ::
+  @spec notify_with_params(client(), JsonRpc.Request.method(), JsonRpc.Request.params()) ::
           :ok
   def notify_with_params(client, method, params) when is_method(method) and is_params(params) do
     send(client, {:notify_with_params, {method, params}})
@@ -108,7 +110,7 @@ defmodule JsonRpc.Client.WebSocket do
   @doc """
   Sends a JSON-RPC notification request without params.
   """
-  @spec notify_without_params(WebSockex.client(), JsonRpc.Request.method()) :: :ok
+  @spec notify_without_params(client(), JsonRpc.Request.method()) :: :ok
   def notify_without_params(client, method) when is_method(method) do
     send(client, {:notify_without_params, method})
     :ok
