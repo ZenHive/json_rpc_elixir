@@ -13,7 +13,7 @@ The package can be installed by adding `json_rpc` to your list of dependencies i
 ```elixir
 def deps do
   [
-    {:json_rpc, git: "https://github.com/ZenHive/json_rpc_elixir.git", tag: "v0.7.0"},
+    {:json_rpc, git: "https://github.com/ZenHive/json_rpc_elixir.git", tag: "v0.7.1"},
   ]
 end
 ```
