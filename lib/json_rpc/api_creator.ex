@@ -47,27 +47,38 @@ defmodule JsonRpc.ApiCreator do
 
   Each method in the list should be a map with the following keys:
 
-  - `method`: The JSON-RPC method name (string)
-  - `doc`: Documentation for the generated function.
-  - `response_type`: The type specification for the response.
-  - `response_parser`: A function that parses the raw response into the desired type. Is only called
-    if the RPC call is successful. If should return `{:ok, any()}` or `{:error, any()}`.
-  - `retries`: The number of times to retry the request if it fails (is optional, defaults to
-    #{@default_retries})
-  - `timeout`: The maximum time to wait for a response in ms (is optional, defaults to
-    #{@default_timeout})
-  - `retry_on_timeout?`: Defines whether to retry the request after a timeout (do not set to true on
-    something like an ethereum transaction as it might duplicate the transaction if the first
-    request went through, but was simply slow to respond) (is optional, defaults to
-    #{@default_retry_on_timeout?})
-  - `time_between_retries`: The time to wait between retries in ms (If retry_on_timeout? is true we
-    first wait for the request to timeout, then wait for time_between_retries, and finally retry
-    the request) (is optional, defaults to #{@default_time_between_retries})
-  - `args`: A list of `{arg_name, type}` tuples defining the function arguments.
-    This argument is optional.
-  - `args_transformer!`: A function that transforms the arguments into the format expected by the
-    RPC call (can also be used to validate the arguments). This argument is required only if `args`
-    is provided.
+  - Required keys:
+    - `method`: The JSON-RPC method name (string)
+    - `doc`: Documentation for the generated function.
+    - `response_type`: The type specification for the response.
+    - `response_parser`: A function that parses the raw response into the desired type. Is only
+      called if the RPC call is successful. If should return `{:ok, any()}` or `{:error, any()}`.
+
+  - Optional keys:
+    - `retries`: The number of times to retry the request if it fails (defaults to
+      #{@default_retries})
+    - `timeout`: The maximum time to wait for a response in ms (defaults to #{@default_timeout})
+    - `retry_on_timeout?`: Defines whether to retry the request after a timeout (do not set to true
+      on something like an ethereum transaction as it might duplicate the transaction if the first
+      request went through, but was simply slow to respond) (defaults to
+      #{@default_retry_on_timeout?})
+    - `time_between_retries`: The time to wait between retries in ms (If retry_on_timeout? is true
+      we first wait for the request to timeout, then wait for time_between_retries, and finally
+      retry the request) (defaults to #{@default_time_between_retries})
+    - `args`: A list of `{arg_name, type}` tuples defining the function arguments.
+    - `args_transformer!`: A function that transforms the arguments into the format expected by the
+      RPC call (can also be used to validate the arguments). This argument is required only if
+      `args` is provided.
+
+  ## Options
+  The macro also generates a type `options` that can be used to override the default behavior of the
+  functions. The options can include:
+
+  - `:retries`: Number of retries
+  - `:timeout`: Timeout in milliseconds
+  - `:retry_on_timeout?`: Whether to retry on timeout
+  - `:time_between_retries`: Time to wait between retries in milliseconds
+
 
   ## Debug Mode
 
@@ -128,6 +139,7 @@ defmodule JsonRpc.ApiCreator do
     methods
     |> List.wrap()
     |> Enum.map(&generate_ast(&1))
+    |> then(&[option_type_ast() | &1])
     |> print_debug_code(__CALLER__.module)
   end
 
@@ -135,6 +147,18 @@ defmodule JsonRpc.ApiCreator do
     methods
     |> List.wrap()
     |> Enum.map(&generate_ast(&1))
+    |> then(&[option_type_ast() | &1])
+  end
+
+  defp option_type_ast() do
+    quote do
+      @type options :: [
+              {:retries, non_neg_integer()}
+              | {:timeout, non_neg_integer()}
+              | {:retry_on_timeout?, boolean()}
+              | {:time_between_retries, non_neg_integer()}
+            ]
+    end
   end
 
   defp generate_ast({:%{}, _, opts}) do
@@ -159,16 +183,7 @@ defmodule JsonRpc.ApiCreator do
 
     quote do
       @doc unquote(doc)
-      @spec unquote(func_name)(
-              WebSockex.client(),
-              unquote_splicing(args_spec),
-              opts :: [
-                {:retries, non_neg_integer()}
-                | {:timeout, non_neg_integer()}
-                | {:retry_on_timeout?, boolean()}
-                | {:time_between_retries, non_neg_integer()}
-              ]
-            ) ::
+      @spec unquote(func_name)(WebSockex.client(), unquote_splicing(args_spec), options()) ::
               {:ok, unquote(response_type)}
               | {:error, :connection_closed | :timeout | JsonRpc.Response.Error.t() | any()}
       def unquote(func_name)(client, unquote_splicing(args), opts \\ []) do
