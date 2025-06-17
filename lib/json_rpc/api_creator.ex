@@ -24,11 +24,12 @@ defmodule JsonRpc.ApiCreator do
         retry_on_timeout?: false,
         time_between_retries: 200,
         response_type: User.t(),
+        parsing_error_type: User.parsing_error(),
         response_parser: &User.parse/1,
         args: [{id, integer()}],
         args_transformer!: fn id ->
           if is_integer(id) do
-            %{id: id}
+            [id]
           else
             raise ArgumentError, "id must be an integer"
           end
@@ -51,8 +52,10 @@ defmodule JsonRpc.ApiCreator do
     - `method`: The JSON-RPC method name (string)
     - `doc`: Documentation for the generated function.
     - `response_type`: The type specification for the response.
+    - `parsing_error_type`: The type specification for the response.
     - `response_parser`: A function that parses the raw response into the desired type. Is only
-      called if the RPC call is successful. If should return `{:ok, any()}` or `{:error, any()}`.
+      called if the RPC call is successful. If should return `{:ok, response_type()}` or
+      `{:error, any()}`.
 
   - Optional keys:
     - `retries`: The number of times to retry the request if it fails (defaults to
@@ -65,7 +68,8 @@ defmodule JsonRpc.ApiCreator do
     - `time_between_retries`: The time to wait between retries in ms (If retry_on_timeout? is true
       we first wait for the request to timeout, then wait for time_between_retries, and finally
       retry the request) (defaults to #{@default_time_between_retries})
-    - `args`: A list of `{arg_name, type}` tuples defining the function arguments.
+    - `args`: A list of `{arg_name, type}` tuples defining the function arguments. `arg_name`
+      MUST NOT start with `__` as this is reserved for internal use.
     - `args_transformer!`: A function that transforms the arguments into the format expected by the
       RPC call (can also be used to validate the arguments). This argument is required only if
       `args` is provided.
@@ -98,11 +102,14 @@ defmodule JsonRpc.ApiCreator do
         method: "getUser",
         doc: "Fetches a user by ID",
         response_type: User.t(),
+        parsing_error_type: User.parsing_error(),
         response_parser: &User.parse/1,
         args: [{id, integer()}],
         args_transformer!: fn id ->
           if is_integer(id) do
-            %{id: id}
+            # You could also return id (When you don't return a list we automatically wrap it in a
+            # list)
+            [id]
           else
             raise ArgumentError, "id must be an integer"
           end
@@ -115,10 +122,11 @@ defmodule JsonRpc.ApiCreator do
         timeout: :timer.seconds(5)
         retry_on_timeout?: true,
         time_between_retries: 200,
-        response_type: [User.t()],
+        response_type: [{:ok, User.t()} | {:error, User.parsing_error()}],
+        parsing_error_type: :invalid_response,
         response_parser: fn
           response when is_list(response) -> {:ok, Enum.map(response, &User.parse/1)}
-          _ -> {:error, "Invalid response"}
+          _ -> {:error, :invalid_response}
         end
       }
     ]
@@ -128,17 +136,36 @@ defmodule JsonRpc.ApiCreator do
 
   {:ok, client} = JsonRpc.Client.WebSocket.start_link("ws://localhost:4242")
 
-  UserApi.get_user(client, "123") # Returns {:ok, %User{}} or {:error, reason}
-  UserApi.list_users(client)    # Returns {:ok, [{:ok, %User{}}, ...]} or {:error, reason}
+  UserApi.get_user(client, 42)
+  # Makes a JSON-RPC call with the following data:
+  # {
+  #   "jsonrpc": "2.0",
+  #   "method": "getUser",
+  #   "params": {"id": "id_42"},
+  #   "id": 1
+  # }
+  # Returns the following:
+  # {:ok, User.t()} | {:error, UserApi.get_user_error()}
 
-  UserApi.get_user(client, "123", timeout: 3000, retries: 4) # override timeout and retries
+  UserApi.list_users(client)
+  # Makes a JSON-RPC call with the following data:
+  # {
+  #   "jsonrpc": "2.0",
+  #   "method": "listUsers",
+  #   "id": 2
+  # }
+  # Returns the following:
+  # {:ok, [{:ok, User.t()} | {:error, User.parsing_error()}]} | {:error, UserApi.list_users_error()}
+
+  # override timeout and retries
+  UserApi.get_user(client, 42, timeout: 3000, retries: 4)
   ```
   """
 
   defmacro __using__({:debug, methods}) do
     methods
     |> List.wrap()
-    |> Enum.map(&generate_ast(&1))
+    |> Enum.map(&generate_functions_ast(&1, __CALLER__.module))
     |> then(&[option_type_ast() | &1])
     |> print_debug_code(__CALLER__.module)
   end
@@ -146,7 +173,7 @@ defmodule JsonRpc.ApiCreator do
   defmacro __using__(methods) do
     methods
     |> List.wrap()
-    |> Enum.map(&generate_ast(&1))
+    |> Enum.map(&generate_functions_ast(&1, __CALLER__.module))
     |> then(&[option_type_ast() | &1])
   end
 
@@ -161,17 +188,34 @@ defmodule JsonRpc.ApiCreator do
     end
   end
 
-  defp generate_ast({:%{}, _, opts}) do
+  defp generate_functions_ast({:%{}, _, opts}, module) do
     %{
       method: method,
       doc: doc,
       response_type: response_type,
+      parsing_error_type: parsing_error_type,
       response_parser: response_parser
     } = opts = Enum.into(opts, %{})
 
     args = Map.get(opts, :args, []) |> List.wrap()
     args_spec = Enum.map(args, fn {arg, type} -> quote do: unquote(arg) :: unquote(type) end)
-    args = Enum.map(args, fn {arg, _type} -> arg end)
+
+    args =
+      Enum.map(args, fn {arg, _type} ->
+        case arg do
+          {arg_name, _, _} when is_atom(arg_name) ->
+            if Atom.to_string(arg_name) |> String.starts_with?("__") do
+              raise "Argument name #{arg_name} cannot start with '__'. This is reserved for internal use."
+            end
+
+          _ ->
+            raise "Argument #{inspect(arg)} must be a tuple of the form {arg_name, type}. " <>
+                    "We do not support pattern matching in argument names at the moment."
+        end
+
+        arg
+      end)
+
     args_transformer! = get_args_transformer!(args, opts, method)
     timeout = Map.get(opts, :timeout, @default_timeout)
     retries = Map.get(opts, :retries, @default_retries)
@@ -179,26 +223,31 @@ defmodule JsonRpc.ApiCreator do
     time_between_retries = Map.get(opts, :time_between_retries, @default_time_between_retries)
 
     func_name = method |> to_snake_case() |> String.to_atom()
+    error_type_name = :"#{func_name}_error" |> Macro.var(module)
     do_func_name = :"do_#{func_name}"
 
     quote do
       @doc unquote(doc)
+      @type unquote(error_type_name) ::
+              :connection_closed
+              | :timeout
+              | JsonRpc.Response.Error.t()
+              | {:parsing_error, unquote(parsing_error_type)}
       @spec unquote(func_name)(WebSockex.client(), unquote_splicing(args_spec), options()) ::
-              {:ok, unquote(response_type)}
-              | {:error, :connection_closed | :timeout | JsonRpc.Response.Error.t() | any()}
-      def unquote(func_name)(client, unquote_splicing(args), opts \\ []) do
+              {:ok, unquote(response_type)} | {:error, unquote(error_type_name)}
+      def unquote(func_name)(__client, unquote_splicing(args), __opts \\ []) do
         unquote(do_func_name)(
-          client,
+          __client,
           unquote_splicing(args),
-          Keyword.get(opts, :timeout, unquote(timeout)),
-          Keyword.get(opts, :retries, unquote(retries)),
-          Keyword.get(opts, :retry_on_timeout?, unquote(retry_on_timeout?)),
-          Keyword.get(opts, :time_between_retries, unquote(time_between_retries))
+          Keyword.get(__opts, :timeout, unquote(timeout)),
+          Keyword.get(__opts, :retries, unquote(retries)),
+          Keyword.get(__opts, :retry_on_timeout?, unquote(retry_on_timeout?)),
+          Keyword.get(__opts, :time_between_retries, unquote(time_between_retries))
         )
       end
 
       defp unquote(do_func_name)(
-             client,
+             __client,
              unquote_splicing(args),
              timeout,
              retries,
@@ -210,7 +259,7 @@ defmodule JsonRpc.ApiCreator do
             if args != [] do
               quote do
                 JsonRpc.Client.WebSocket.call_with_params(
-                  client,
+                  __client,
                   unquote(method),
                   unquote(args_transformer!).(unquote_splicing(args)) |> List.wrap(),
                   timeout
@@ -219,7 +268,7 @@ defmodule JsonRpc.ApiCreator do
             else
               quote do
                 JsonRpc.Client.WebSocket.call_without_params(
-                  client,
+                  __client,
                   unquote(method),
                   timeout
                 )
@@ -229,16 +278,18 @@ defmodule JsonRpc.ApiCreator do
 
         case result do
           {:ok, raw_response_result} ->
-            # This pattern is only true if the response is neither :connection_closed nor :timeout
-            with {:ok, raw_response} <- raw_response_result,
-                 do: unquote(response_parser).(raw_response)
+            # This pattern is only valid if the response is neither :connection_closed nor :timeout
+            with {:ok, raw_response} <- raw_response_result do
+              with {:error, reason} <- unquote(response_parser).(raw_response),
+                   do: {:error, {:parsing_error, reason}}
+            end
 
           {:error, reason} ->
             if retries > 0 && (reason != :timeout || retry_on_timeout?) do
               Process.sleep(time_between_retries)
 
               unquote(do_func_name)(
-                client,
+                __client,
                 unquote_splicing(args),
                 timeout,
                 retries - 1,
