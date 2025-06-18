@@ -190,13 +190,20 @@ defmodule JsonRpc.ApiCreator do
       ```
       """
       @spec start_link(JsonRpc.Client.WebSocket.conn_info(), [JsonRpc.Client.WebSocket.option()]) ::
-              {:ok, WebSockex.client()} | {:error, any()}
+              {:ok, pid()} | {:error, term()}
       def start_link(url, opts \\ []) do
         JsonRpc.Client.WebSocket.start_link(url, opts)
       end
 
       @doc """
       # Example usage:
+      ```elixir
+      children = [{#{unquote(module)}, "ws://localhost"}]
+      opts = [strategy: :one_for_one]
+      Supervisor.start_link(children, opts)
+      ```
+
+      # Example usage with options:
       ```elixir
       children = [
         {
@@ -208,7 +215,7 @@ defmodule JsonRpc.ApiCreator do
         }
       ]
 
-      opts = [strategy: :one_for_one, name: BlockWatch.Supervisor]
+      opts = [strategy: :one_for_one]
       Supervisor.start_link(children, opts)
       ```
       """
@@ -219,14 +226,6 @@ defmodule JsonRpc.ApiCreator do
         }
       end
 
-      @doc """
-      # Example usage:
-      ```elixir
-      children = [{#{unquote(module)}, "ws://localhost"}]
-      opts = [strategy: :one_for_one, name: BlockWatch.Supervisor]
-      Supervisor.start_link(children, opts)
-      ```
-      """
       def child_spec(url) do
         %{
           id: __MODULE__,
