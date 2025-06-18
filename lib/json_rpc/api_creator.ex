@@ -184,7 +184,7 @@ defmodule JsonRpc.ApiCreator do
       @doc """
       Starts the WebSocket client with the given URL and options.
 
-      # Example usage:
+      ## Example usage:
       ```elixir
       {:ok, client} = #{unquote(module)}.start_link("ws://localhost", name: #{unquote(module)})
       ```
@@ -196,14 +196,14 @@ defmodule JsonRpc.ApiCreator do
       end
 
       @doc """
-      # Example usage:
+      ## Example usage:
       ```elixir
       children = [{#{unquote(module)}, "ws://localhost"}]
       opts = [strategy: :one_for_one]
       Supervisor.start_link(children, opts)
       ```
 
-      # Example usage with options:
+      ## Example usage with options:
       ```elixir
       children = [
         {
