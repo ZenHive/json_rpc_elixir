@@ -134,7 +134,7 @@ defmodule JsonRpc.ApiCreator do
 
   # Usage:
 
-  {:ok, client} = JsonRpc.Client.WebSocket.start_link("ws://localhost:4242")
+  {:ok, client} = UserApi.start_link("ws://localhost:4242")
 
   UserApi.get_user(client, 42)
   # Makes a JSON-RPC call with the following data:
@@ -163,28 +163,88 @@ defmodule JsonRpc.ApiCreator do
   """
 
   defmacro __using__({:debug, methods}) do
-    methods
-    |> List.wrap()
-    |> Enum.map(&generate_functions_ast(&1, __CALLER__.module))
-    |> then(&[option_type_ast() | &1])
+    generate_ast(methods, __CALLER__.module)
     |> print_debug_code(__CALLER__.module)
   end
 
   defmacro __using__(methods) do
+    generate_ast(methods, __CALLER__.module)
+  end
+
+  defp generate_ast(methods, module) do
     methods
     |> List.wrap()
-    |> Enum.map(&generate_functions_ast(&1, __CALLER__.module))
+    |> Enum.map(&generate_functions_ast(&1, module))
+    |> then(&[start_link_ast(module) | &1])
     |> then(&[option_type_ast() | &1])
+  end
+
+  defp start_link_ast(module) do
+    quote do
+      @doc """
+      Starts the WebSocket client with the given URL and options.
+
+      # Example usage:
+      ```elixir
+      {:ok, client} = #{unquote(module)}.start_link("ws://localhost", name: #{unquote(module)})
+      ```
+      """
+      @spec start_link(JsonRpc.Client.WebSocket.conn_info(), [JsonRpc.Client.WebSocket.option()]) ::
+              {:ok, WebSockex.client()} | {:error, any()}
+      def start_link(url, opts \\ []) do
+        JsonRpc.Client.WebSocket.start_link(url, opts)
+      end
+
+      @doc """
+      # Example usage:
+      ```elixir
+      children = [
+        {
+          #{unquote(module)},
+          {
+            "ws://localhost",
+            name: #{unquote(module)}
+          }
+        }
+      ]
+
+      opts = [strategy: :one_for_one, name: BlockWatch.Supervisor]
+      Supervisor.start_link(children, opts)
+      ```
+      """
+      def child_spec({url, opts}) do
+        %{
+          id: __MODULE__,
+          start: {__MODULE__, :start_link, [url, opts]}
+        }
+      end
+
+      @doc """
+      # Example usage:
+      ```elixir
+      children = [{#{unquote(module)}, "ws://localhost"}]
+      opts = [strategy: :one_for_one, name: BlockWatch.Supervisor]
+      Supervisor.start_link(children, opts)
+      ```
+      """
+      def child_spec(url) do
+        %{
+          id: __MODULE__,
+          start: {__MODULE__, :start_link, [url]}
+        }
+      end
+    end
   end
 
   defp option_type_ast() do
     quote do
-      @type options :: [
+      @type option ::
               {:retries, non_neg_integer()}
               | {:timeout, non_neg_integer()}
               | {:retry_on_timeout?, boolean()}
               | {:time_between_retries, non_neg_integer()}
-            ]
+
+      @type options :: [option()]
     end
   end
 
@@ -205,7 +265,8 @@ defmodule JsonRpc.ApiCreator do
         case arg do
           {arg_name, _, _} when is_atom(arg_name) ->
             if Atom.to_string(arg_name) |> String.starts_with?("__") do
-              raise "Argument name #{arg_name} cannot start with '__'. This is reserved for internal use."
+              raise "Argument name #{arg_name} cannot start with '__'. This is reserved for " <>
+                      "internal use."
             end
 
           _ ->
