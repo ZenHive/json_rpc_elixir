@@ -1,8 +1,13 @@
 defmodule JsonRpc.ApiCreator do
-  @default_retries 2
-  @default_timeout 5_000
-  @default_retry_on_timeout? false
-  @default_time_between_retries 200
+  # TODO update the docs
+
+  import JsonRpc.ApiCreator.Dsl,
+    only: [
+      default_retries: 0,
+      default_timeout: 0,
+      default_retry_on_timeout?: 0,
+      default_time_between_retries: 0
+    ]
 
   @moduledoc """
   ## Description
@@ -59,15 +64,15 @@ defmodule JsonRpc.ApiCreator do
 
   - Optional keys:
     - `retries`: The number of times to retry the request if it fails (defaults to
-      #{@default_retries})
-    - `timeout`: The maximum time to wait for a response in ms (defaults to #{@default_timeout})
+      #{default_retries()})
+    - `timeout`: The maximum time to wait for a response in ms (defaults to #{default_timeout()})
     - `retry_on_timeout?`: Defines whether to retry the request after a timeout (do not set to true
       on something like an ethereum transaction as it might duplicate the transaction if the first
       request went through, but was simply slow to respond) (defaults to
-      #{@default_retry_on_timeout?})
+      #{default_retry_on_timeout?()})
     - `time_between_retries`: The time to wait between retries in ms (If retry_on_timeout? is true
       we first wait for the request to timeout, then wait for time_between_retries, and finally
-      retry the request) (defaults to #{@default_time_between_retries})
+      retry the request) (defaults to #{default_time_between_retries()})
     - `args`: A list of `{arg_name, type}` tuples defining the function arguments. `arg_name`
       MUST NOT start with `__` as this is reserved for internal use.
     - `args_transformer!`: A function that transforms the arguments into the format expected by the
@@ -161,233 +166,8 @@ defmodule JsonRpc.ApiCreator do
   UserApi.get_user(client, 42, timeout: 3000, retries: 4)
   ```
   """
-
-  defmacro __using__({:debug, methods}) do
-    generate_ast(methods, __CALLER__.module)
-    |> print_debug_code(__CALLER__.module)
-  end
-
-  defmacro __using__(methods) do
-    generate_ast(methods, __CALLER__.module)
-  end
-
-  defp generate_ast(methods, module) do
-    methods
-    |> List.wrap()
-    |> Enum.map(&generate_functions_ast(&1, module))
-    |> then(&[start_link_ast(module) | &1])
-    |> then(&[option_type_ast() | &1])
-  end
-
-  defp start_link_ast(module) do
-    quote do
-      @doc """
-      Starts the WebSocket client with the given URL and options.
-
-      ## Example usage:
-      ```elixir
-      {:ok, client} = #{unquote(module)}.start_link("ws://localhost", name: #{unquote(module)})
-      ```
-      """
-      @spec start_link(JsonRpc.Client.WebSocket.conn_info(), [JsonRpc.Client.WebSocket.option()]) ::
-              {:ok, pid()} | {:error, term()}
-      def start_link(url, opts \\ []) do
-        JsonRpc.Client.WebSocket.start_link(url, opts)
-      end
-
-      @doc """
-      ## Example usage:
-      ```elixir
-      children = [{#{unquote(module)}, "ws://localhost"}]
-      opts = [strategy: :one_for_one]
-      Supervisor.start_link(children, opts)
-      ```
-
-      ## Example usage with options:
-      ```elixir
-      children = [
-        {
-          #{unquote(module)},
-          {
-            "ws://localhost",
-            name: #{unquote(module)}
-          }
-        }
-      ]
-
-      opts = [strategy: :one_for_one]
-      Supervisor.start_link(children, opts)
-      ```
-      """
-      def child_spec({url, opts}) do
-        %{
-          id: __MODULE__,
-          start: {__MODULE__, :start_link, [url, opts]}
-        }
-      end
-
-      def child_spec(url) do
-        %{
-          id: __MODULE__,
-          start: {__MODULE__, :start_link, [url]}
-        }
-      end
-    end
-  end
-
-  defp option_type_ast() do
-    quote do
-      @type option ::
-              {:retries, non_neg_integer()}
-              | {:timeout, non_neg_integer()}
-              | {:retry_on_timeout?, boolean()}
-              | {:time_between_retries, non_neg_integer()}
-
-      @type options :: [option()]
-    end
-  end
-
-  defp generate_functions_ast({:%{}, _, opts}, module) do
-    %{
-      method: method,
-      doc: doc,
-      response_type: response_type,
-      parsing_error_type: parsing_error_type,
-      response_parser: response_parser
-    } = opts = Enum.into(opts, %{})
-
-    args = Map.get(opts, :args, []) |> List.wrap()
-    args_spec = Enum.map(args, fn {arg, type} -> quote do: unquote(arg) :: unquote(type) end)
-
-    args =
-      Enum.map(args, fn {arg, _type} ->
-        case arg do
-          {arg_name, _, _} when is_atom(arg_name) ->
-            if Atom.to_string(arg_name) |> String.starts_with?("__") do
-              raise "Argument name #{arg_name} cannot start with '__'. This is reserved for " <>
-                      "internal use."
-            end
-
-          _ ->
-            raise "Argument #{inspect(arg)} must be a tuple of the form {arg_name, type}. " <>
-                    "We do not support pattern matching in argument names at the moment."
-        end
-
-        arg
-      end)
-
-    args_transformer! = get_args_transformer!(args, opts, method)
-    timeout = Map.get(opts, :timeout, @default_timeout)
-    retries = Map.get(opts, :retries, @default_retries)
-    retry_on_timeout? = Map.get(opts, :retry_on_timeout?, @default_retry_on_timeout?)
-    time_between_retries = Map.get(opts, :time_between_retries, @default_time_between_retries)
-
-    func_name = method |> to_snake_case() |> String.to_atom()
-    error_type_name = :"#{func_name}_error" |> Macro.var(module)
-    do_func_name = :"do_#{func_name}"
-
-    quote do
-      @doc unquote(doc)
-      @type unquote(error_type_name) ::
-              :connection_closed
-              | :timeout
-              | JsonRpc.Response.Error.t()
-              | {:parsing_error, unquote(parsing_error_type)}
-      @spec unquote(func_name)(WebSockex.client(), unquote_splicing(args_spec), options()) ::
-              {:ok, unquote(response_type)} | {:error, unquote(error_type_name)}
-      def unquote(func_name)(__client, unquote_splicing(args), __opts \\ []) do
-        unquote(do_func_name)(
-          __client,
-          unquote_splicing(args),
-          Keyword.get(__opts, :timeout, unquote(timeout)),
-          Keyword.get(__opts, :retries, unquote(retries)),
-          Keyword.get(__opts, :retry_on_timeout?, unquote(retry_on_timeout?)),
-          Keyword.get(__opts, :time_between_retries, unquote(time_between_retries))
-        )
-      end
-
-      defp unquote(do_func_name)(
-             __client,
-             unquote_splicing(args),
-             timeout,
-             retries,
-             retry_on_timeout?,
-             time_between_retries
-           ) do
-        result =
-          unquote(
-            if args != [] do
-              quote do
-                JsonRpc.Client.WebSocket.call_with_params(
-                  __client,
-                  unquote(method),
-                  unquote(args_transformer!).(unquote_splicing(args)) |> List.wrap(),
-                  timeout
-                )
-              end
-            else
-              quote do
-                JsonRpc.Client.WebSocket.call_without_params(
-                  __client,
-                  unquote(method),
-                  timeout
-                )
-              end
-            end
-          )
-
-        case result do
-          {:ok, raw_response_result} ->
-            # This pattern is only valid if the response is neither :connection_closed nor :timeout
-            with {:ok, raw_response} <- raw_response_result do
-              with {:error, reason} <- unquote(response_parser).(raw_response),
-                   do: {:error, {:parsing_error, reason}}
-            end
-
-          {:error, reason} ->
-            if retries > 0 && (reason != :timeout || retry_on_timeout?) do
-              Process.sleep(time_between_retries)
-
-              unquote(do_func_name)(
-                __client,
-                unquote_splicing(args),
-                timeout,
-                retries - 1,
-                retry_on_timeout?,
-                time_between_retries
-              )
-            else
-              {:error, reason}
-            end
-        end
-      end
-    end
-  end
-
-  defp get_args_transformer!(args, opts, method) do
-    if args != [] do
-      Map.get(opts, :args_transformer!) ||
-        throw("Missing key :args_transformer! for method #{method}")
-    else
-      :nop
-    end
-  end
-
-  defp print_debug_code(ast, module) do
-    readable_code = ast |> Macro.to_string() |> Code.format_string!() |> IO.iodata_to_binary()
-    IO.puts("Generated code for module #{module} #{readable_code}")
-
-    ast
-  end
-
-  defp to_snake_case(str) do
-    str
-    |> String.replace(
-      # Find a lowercase letter followed by an uppercase letter
-      ~r/([a-z])([A-Z])/,
-      # Replace with the lowercase letter, an underscore, and the uppercase letter
-      "\\1_\\2"
-    )
-    |> String.downcase()
-  end
+  use Spark.Dsl,
+    default_extensions: [
+      extensions: [__MODULE__.Dsl]
+    ]
 end

@@ -34,6 +34,9 @@ defmodule JsonRpc.MixProject do
       ## Web socket client
       {:websockex, "~> 0.4.3"},
 
+      ## DSL
+      {:spark, "~> 2.2.68"},
+
       # Tests
 
       ## Web socket server
