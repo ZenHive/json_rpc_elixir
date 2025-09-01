@@ -8,8 +8,6 @@ defmodule JsonRpc.ApiCreator do
     ]
 
   @moduledoc """
-  ## Description
-
   Defines a use macro for creating JSON-RPC APIs by automatically generating functions
   that map to JSON-RPC methods. It handles the boilerplate of making RPC calls and
   parsing responses.
@@ -65,8 +63,8 @@ defmodule JsonRpc.ApiCreator do
 
   - Required keys:
     - `doc`: Documentation for the generated function.
-    - `response_type`: The type specification for the response.
-    - `parsing_error_type`: The type specification for the response.
+    - `response_type`: The type specification for the response on success.
+    - `parsing_error_type`: The type specification for the response_parser error.
     - `response_parser`: A function that parses the raw response into the desired type. Is only
       called if the RPC call is successful. If should return `{:ok, response_type()}` or
       `{:error, any()}`.
@@ -168,6 +166,15 @@ defmodule JsonRpc.ApiCreator do
   # override timeout and retries
   UserApi.get_user(client, 42, timeout: 3000, retries: 4)
   ```
+
+  ## Formatting
+  Add the following to your `.formatter.exs`:
+  ```elixir
+  import_deps: [:json_rpc],
+  ```
+
+  ---
+  The rest of this documentation was generated automatically and should be ignored
   """
   use Spark.Dsl,
     default_extensions: [
