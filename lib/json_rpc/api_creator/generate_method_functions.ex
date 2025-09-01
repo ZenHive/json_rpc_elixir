@@ -32,6 +32,8 @@ defmodule JsonRpc.ApiCreator.GenerateMethodFunctions do
          },
          module
        ) do
+    args = List.wrap(args)
+
     args_spec = Enum.map(args, fn {arg, type} -> quote do: unquote(arg) :: unquote(type) end)
 
     args =
