@@ -173,8 +173,32 @@ defmodule JsonRpc.ApiCreator do
   import_deps: [:json_rpc],
   ```
 
+  ## Custom frame handler
+  If the API you are working with sends frames that are not responses to requests (e.g. ethereum
+  subscriptions) you can define a function `unrecognized_frame_handler/1` in your module to handle
+  those frames.
+
+  ```elixir
+  def unrecognized_frame_handler(frame) do
+    # Handle the frame (e.g. send it to a process, log it, etc.)
+    IO.inspect(frame, label: "Unrecognized frame")
+
+    # Return value is ignored
+    :ok
+  end
+  ```
+
+  Only frames that are not recognized as responses to requests will be passed to this function.
+
+  The unrecognized frame handler can also be replaced by passing the `:unrecognized_frame_handler`
+  option to start_link/2.
+
+  ```elixir
+  {:ok, client} = MyApi.start_link("ws://localhost", unrecognized_frame_handler: &my_handler/1)
+  ```
+
   ---
-  The rest of this documentation was generated automatically and should be ignored
+  ## The rest of this documentation was generated automatically and may be ignored
   """
   use Spark.Dsl,
     default_extensions: [

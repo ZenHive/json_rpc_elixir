@@ -99,15 +99,14 @@ defmodule JsonRpc.ApiCreator.Dsl do
 
   @methods %Spark.Dsl.Section{
     name: :methods,
-    entities: [
-      @method
-    ],
+    entities: [@method],
     describe: "Defines the methods that can be called via JSON-RPC"
   }
 
   use Spark.Dsl.Extension,
     sections: [@methods],
     transformers: [
+      JsonRpc.ApiCreator.GenerateDefaultFrameHandler,
       JsonRpc.ApiCreator.GenerateMethodFunctions,
       JsonRpc.ApiCreator.GenerateOptionsType,
       JsonRpc.ApiCreator.GenerateStartLinkFunction

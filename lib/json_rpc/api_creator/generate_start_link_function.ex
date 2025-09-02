@@ -18,6 +18,7 @@ defmodule JsonRpc.ApiCreator.GenerateStartLinkFunction do
       @spec start_link(JsonRpc.Client.WebSocket.conn_info(), [JsonRpc.Client.WebSocket.option()]) ::
               {:ok, pid()} | {:error, term()}
       def start_link(url, opts \\ []) do
+        opts = Keyword.put_new(opts, :unrecognized_frame_handler, &unrecognized_frame_handler/1)
         JsonRpc.Client.WebSocket.start_link(url, opts)
       end
 
