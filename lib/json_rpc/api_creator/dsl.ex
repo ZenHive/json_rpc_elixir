@@ -10,6 +10,16 @@ defmodule JsonRpc.ApiCreator.Dsl do
   @default_time_between_retries 200
   def default_time_between_retries, do: @default_time_between_retries
 
+  @spec check_doc(doc :: any()) :: {:ok, String.t() | false} | {:error, String.t()}
+  def check_doc(doc) when is_binary(doc) do
+    if String.valid?(doc), do: {:ok, doc}, else: {:error, check_doc_error(doc)}
+  end
+
+  def check_doc(false), do: {:ok, false}
+  def check_doc(doc), do: {:error, check_doc_error(doc)}
+
+  def check_doc_error(doc), do: "doc must be either a string or false, found: #{inspect(doc)}"
+
   defmodule Method do
     defstruct [
       # Required
@@ -40,7 +50,7 @@ defmodule JsonRpc.ApiCreator.Dsl do
         doc: "The name of the method as it will be called via JSON-RPC"
       ],
       doc: [
-        type: :string,
+        type: {:custom, __MODULE__, :check_doc, []},
         required: true,
         doc: "The documentation for the method"
       ],

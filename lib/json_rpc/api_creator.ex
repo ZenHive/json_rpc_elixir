@@ -62,7 +62,8 @@ defmodule JsonRpc.ApiCreator do
   ```
 
   - Required keys:
-    - `doc`: Documentation for the generated function.
+    - `doc`: Documentation for the generated function or false (false has the same effect as
+      `@doc false`).
     - `response_type`: The type specification for the response on success.
     - `parsing_error_type`: The type specification for the response_parser error.
     - `response_parser`: A function that parses the raw response into the desired type. Is only
@@ -110,14 +111,9 @@ defmodule JsonRpc.ApiCreator do
         response_parser &User.parse/1
         args [{id, integer()}]
 
-        args_transformer! fn id ->
-          if is_integer(id) do
-            # You could also return id (When you don't return a list we automatically wrap it in a
-            # list)
-            [id]
-          else
-            raise ArgumentError, "id must be an integer"
-          end
+        args_transformer! fn
+          id when is_integer(id) -> id # When you don't return a list we automatically wrap it
+          _ -> raise ArgumentError, "id must be an integer"
         end
       end
 
@@ -127,12 +123,20 @@ defmodule JsonRpc.ApiCreator do
         timeout :timer.seconds(5)
         retry_on_timeout? true
         time_between_retries 200
-        response_type [{:ok, User.t()} | {:error, User.parsing_error()}]
+        response_type [User.t()]
         parsing_error_type :invalid_response
 
         response_parser fn
-          response when is_list(response) -> {:ok, Enum.map(response, &User.parse/1)}
-          _ -> {:error, :invalid_response}
+          response when is_list(response) ->
+            Enum.reduce_while(response, {:ok, []}, fn item, {:ok, acc} ->
+              case User.parse(item) do
+                {:ok, user} -> {:cont, {:ok, [user | acc]}}
+                {:error, _} = err -> {:halt, err}
+              end
+            end)
+
+          _ ->
+            {:error, :invalid_response}
         end
       end
     end
@@ -161,7 +165,7 @@ defmodule JsonRpc.ApiCreator do
   #   "id": 2
   # }
   # Returns the following:
-  # {:ok, [{:ok, User.t()} | {:error, User.parsing_error()}]} | {:error, UserApi.list_users_error()}
+  # {:ok, [User.t()]} | {:error, UserApi.list_users_error()}
 
   # override timeout and retries
   UserApi.get_user(client, 42, timeout: 3000, retries: 4)

@@ -29,7 +29,7 @@ defmodule JsonRpc.ApiCreatorTest do
       end
 
       method "listUsers" do
-        doc "Lists all users"
+        doc false
         timeout 2_000
         retries 4
         retry_on_timeout? true
